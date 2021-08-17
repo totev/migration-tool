@@ -114,10 +114,10 @@ async function insertData(context) {
 
 function insertCollection(collection) {
 	return async (context, task) => {
-		const pages = Math.ceil(context.counts[collection.collection] / 100);
+		const pages = Math.ceil(context.counts[collection.collection] / 40);
 
 		for (let i = 0; i < pages; i++) {
-			task.output = `Inserting items ${i * 100 + 1}—${(i + 1) * 100}/${
+			task.output = `Inserting items ${i * 40 + 1}—${(i + 1) * 40}/${
 				context.counts[collection.collection]
 			}`;
 			await insertBatch(collection, i, context, task);
@@ -129,8 +129,8 @@ async function insertBatch(collection, page, context, task) {
 	const getRecordsResponse = () =>
 		apiV8.get(`/items/${collection.collection}`, {
 			params: {
-				offset: page * 100,
-				limit: 100,
+				offset: page * 40,
+				limit: 40,
 			},
 		});
 
@@ -151,7 +151,7 @@ async function insertBatch(collection, page, context, task) {
 		);
 	});
 
-	const itemRecords =
+	let itemRecords =
 		systemRelationsForCollection.length === 0
 			? recordsResponse.data.data
 			: recordsResponse.data.data.map((item) => {
@@ -166,7 +166,27 @@ async function insertBatch(collection, page, context, task) {
 					}
 
 					return item;
-			  });
+			});
+	
+
+	// custom patches
+	const wrongDateRegex = /\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d/
+	itemRecords.forEach(itemRecord => {
+		if (wrongDateRegex.test(itemRecord.created_on)) {
+			console.log("Modifiyng created_on");
+			itemRecord.created_on = itemRecord.created_on.replace(" ","T" )
+		}
+		if (wrongDateRegex.test(itemRecord.modified_on)) {
+			console.log("Modifiyng modified_on");
+			itemRecord.modified_on = itemRecord.modified_on.replace(" ","T" )
+		}
+	})
+
+	// filter out invalid project files
+	if (collection.collection.startsWith("projects_")) {
+		const knownProjects = [110, 111, 121, 122, 123, 125, 128, 129, 130, 131, 132, 135, 138, 142, 144, 146, 147, 149, 152, 153, 155, 156, 157, 163, 169, 170, 171, 172, 177, 180, 182, 183, 185, 187, 197, 200, 204, 205, 207, 208, 213, 230, 232, 234, 235, 237, 238, 239, 240, 241, 244, 245, 247, 248, 249];
+		itemRecords = itemRecords.filter(itemRecord => knownProjects.includes(itemRecord.projects_id));
+	}
 
 	try {
 		if (collection.single === true) {
@@ -176,7 +196,7 @@ async function insertBatch(collection, page, context, task) {
 		}
 	} catch (err) {
 		console.log(err.response.data);
-		throw Error("Data migration failed. Check directus logs for most insight.")
+		throw Error("Data migration failed. Check directus logs for most insight."+ JSON.stringify(itemRecords))
 	}
 }
 
